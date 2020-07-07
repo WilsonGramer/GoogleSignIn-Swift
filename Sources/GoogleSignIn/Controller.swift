@@ -21,11 +21,25 @@ public class Controller {
         return components.url!
     }
 
-    public func getAccessToken(using redirectUrl: URL, completion: @escaping (Result<Token, Error>) -> Void) {
-        guard let code = self.code(from: redirectUrl) else {
-            completion(.failure(.codeNotFoundInRedirectURL))
-            return
+    public func code(from redirectURL: URL) throws -> String {
+        let components = URLComponents(url: redirectURL, resolvingAgainstBaseURL: false)
+        guard let code = components?.queryItems?.first(where: { $0.name == "code" })?.value else {
+            throw Error.codeNotFoundInRedirectURL
         }
+        return code
+    }
+
+    public func getAccessToken(using redirectUrl: URL, completion: @escaping (Result<Token, Error>) -> Void) {
+        let code: String
+        do {
+            code = try self.code(from: redirectUrl)
+        } catch let error as Error {
+            completion(.failure(error))
+            return
+        } catch {
+            fatalError("Unreachable")
+        }
+
         let task = session.dataTask(with: makeTokenRequest(with: code)) { data, response, error in
             if let error = error {
                 completion(.failure(.networkError(error)))
@@ -48,11 +62,6 @@ public class Controller {
 
     private let config: Config
     private let session: URLSessionProtocol
-
-    private func code(from redirectURL: URL) -> String? {
-        let components = URLComponents(url: redirectURL, resolvingAgainstBaseURL: false)
-        return components?.queryItems?.first(where: { $0.name == "code" })?.value
-    }
 
     private func makeTokenRequest(with code: String) -> URLRequest {
         var request = URLRequest(url: makeTokenURL())
